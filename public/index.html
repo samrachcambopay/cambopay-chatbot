@@ -180,9 +180,10 @@
     background: var(--gray-800); color: #e2e8f0;
     border-radius: 10px; padding: 14px; margin: 10px 0;
     overflow-x: auto; font-family: 'JetBrains Mono', monospace;
-    font-size: 12px; line-height: 1.6;
+    font-size: 12px; line-height: 1.55;
     border: 1px solid rgba(255,255,255,0.08);
-    max-width: 100%; white-space: pre-wrap; word-break: break-all;
+    max-width: 100%; white-space: pre; word-break: normal;
+    tab-size: 2;
   }
   .bubble pre code { background: none; color: inherit; padding: 0; font-size: 12px; }
   .bubble strong { font-weight: 600; color: var(--blue-700); }
@@ -500,17 +501,25 @@ function removeTyping() {
 }
 
 function formatMarkdown(text) {
-  // Step 1: escape HTML
-  let out = text
+  // Step 1: extract code blocks FIRST (before any escaping)
+  const codeBlocks = [];
+  let out = text.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) => {
+    const escaped = code.trim()
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const placeholder = '\x00CODE' + codeBlocks.length + '\x00';
+    codeBlocks.push('<pre><code>' + escaped + '</code></pre>');
+    return placeholder;
+  });
+
+  // Step 2: escape remaining HTML
+  out = out
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // Step 2: fenced code blocks
-  out = out.replace(/```[\w]*\n([\s\S]*?)```/g, (_, code) =>
-    '<pre><code>' + code.trim() + '</code></pre>');
-
-  // Step 3: inline code
+  // Step 3: inline code (after HTML escape)
   out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
 
   // Step 4: bold
@@ -563,6 +572,11 @@ function formatMarkdown(text) {
   // Collapse 2+ newlines into a paragraph gap, single newline = small break
   out = out.replace(/\n{2,}(?!<\/(pre|table|ul|tr|th|td))/g, '<br><br>');
   out = out.replace(/\n(?!<\/(pre|table|ul|tr|th|td))/g, ' ');
+
+  // Restore code blocks
+  codeBlocks.forEach((block, i) => {
+    out = out.replace('\x00CODE' + i + '\x00', block);
+  });
 
   return out;
 }
